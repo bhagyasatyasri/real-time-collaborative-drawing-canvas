@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
@@ -11,6 +12,7 @@ import { COMMUNITY_CANVAS_ID } from './types';
 const USER_DB_KEY = 'collaborative-canvas-users';
 const SESSION_KEY = 'collaborative-canvas-session';
 const ROOMS_DB_KEY = 'collaborative-canvas-rooms';
+const ONLINE_USERS_KEY = 'collaborative-canvas-online-users';
 
 const USER_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#f97316', '#14b8a6'];
 
@@ -31,8 +33,22 @@ const App: React.FC = () => {
 
   const getRoomsFromDB = (): Room[] => JSON.parse(localStorage.getItem(ROOMS_DB_KEY) || '[]');
   const saveRoomsToDB = (rooms: Room[]) => localStorage.setItem(ROOMS_DB_KEY, JSON.stringify(rooms));
+  
+  const getOnlineUsers = (): User[] => JSON.parse(localStorage.getItem(ONLINE_USERS_KEY) || '[]');
+  const saveOnlineUsers = (users: User[]) => localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(users));
 
   useEffect(() => {
+    // Add beforeunload listener to clean up online status
+    const handleBeforeUnload = () => {
+        const sessionEmail = localStorage.getItem(SESSION_KEY);
+        if (sessionEmail) {
+             let onlineUsers: User[] = getOnlineUsers();
+             onlineUsers = onlineUsers.filter(u => u.id !== sessionEmail);
+             saveOnlineUsers(onlineUsers);
+        }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     // Load initial rooms and check for session
     const savedRooms = getRoomsFromDB();
     const communityCanvas = savedRooms.find(room => room.id === COMMUNITY_CANVAS_ID);
@@ -58,6 +74,13 @@ const App: React.FC = () => {
                 incomingFriendRequests: user.incomingFriendRequests || [],
             };
             setCurrentUser(loggedInUser);
+
+            // Add to online list on session restore
+            const onlineUsers = getOnlineUsers();
+            if (!onlineUsers.find(u => u.id === loggedInUser.id)) {
+                onlineUsers.push(loggedInUser);
+                saveOnlineUsers(onlineUsers);
+            }
             
             const urlParams = new URLSearchParams(window.location.search);
             const roomToJoin = urlParams.get('room');
@@ -70,6 +93,10 @@ const App: React.FC = () => {
         } else {
             localStorage.removeItem(SESSION_KEY);
         }
+    }
+
+    return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -118,6 +145,13 @@ const App: React.FC = () => {
       setCurrentUser(loggedInUser);
       localStorage.setItem(SESSION_KEY, email);
       
+      // Add to online list
+      const onlineUsers = getOnlineUsers();
+      if (!onlineUsers.find(u => u.id === loggedInUser.id)) {
+          onlineUsers.push(loggedInUser);
+          saveOnlineUsers(onlineUsers);
+      }
+      
       const urlParams = new URLSearchParams(window.location.search);
       const roomToJoin = urlParams.get('room');
       if (roomToJoin) {
@@ -131,6 +165,12 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    const sessionEmail = localStorage.getItem(SESSION_KEY);
+    if (sessionEmail) {
+        let onlineUsers = getOnlineUsers();
+        onlineUsers = onlineUsers.filter(u => u.id !== sessionEmail);
+        saveOnlineUsers(onlineUsers);
+    }
     setCurrentUser(null);
     localStorage.removeItem(SESSION_KEY);
     setNavigation({ page: 'login' });

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { User, Room } from '../types';
 import { COMMUNITY_CANVAS_ID } from '../types';
@@ -11,7 +12,7 @@ interface HomePageProps {
     onNavigateToProfile: (userId: string) => void;
 }
 
-const USER_DB_KEY = 'collaborative-canvas-users';
+const ONLINE_USERS_KEY = 'collaborative-canvas-online-users';
 
 const Avatar: React.FC<{ user: User, size?: string, className?: string }> = ({ user, size="w-20 h-20", className="" }) => {
     if (user.profilePicture) {
@@ -33,19 +34,29 @@ export const HomePage: React.FC<HomePageProps> = ({ user, rooms, onJoinRoom, onC
     const [newRoomPassword, setNewRoomPassword] = useState('');
 
     useEffect(() => {
-        try {
-            const savedUsers = localStorage.getItem(USER_DB_KEY);
-            const allUsers = savedUsers ? JSON.parse(savedUsers) : [];
-            setOnlineUsers(allUsers.map((u: any) => ({ 
-                id: u.email, 
-                name: u.name, 
-                color: u.color, 
-                profilePicture: u.profilePicture 
-            })));
-        } catch(e) {
-            console.error("Failed to parse users from localStorage", e);
-            setOnlineUsers([]);
-        }
+        const getOnlineUsers = () => {
+            try {
+                const savedOnlineUsers = localStorage.getItem(ONLINE_USERS_KEY);
+                return savedOnlineUsers ? JSON.parse(savedOnlineUsers) : [];
+            } catch (e) {
+                console.error("Failed to parse online users from localStorage", e);
+                return [];
+            }
+        };
+
+        setOnlineUsers(getOnlineUsers()); // Initial fetch
+
+        const handleStorageChange = (event: StorageEvent) => {
+            if (event.key === ONLINE_USERS_KEY) {
+                setOnlineUsers(getOnlineUsers());
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
     }, []);
 
     const handleCreateRoom = (e: React.FormEvent) => {

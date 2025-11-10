@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [navigation, setNavigation] = useState<NavigationState>({ page: 'login' });
   const [rooms, setRooms] = useState<Room[]>([]); // Centralized room state
+  const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
 
   const getUsersFromDB = (): any[] => JSON.parse(localStorage.getItem(USER_DB_KEY) || '[]');
   const saveUsersToDB = (users: any[]) => localStorage.setItem(USER_DB_KEY, JSON.stringify(users));
@@ -34,20 +35,30 @@ const App: React.FC = () => {
   const getRoomsFromDB = (): Room[] => JSON.parse(localStorage.getItem(ROOMS_DB_KEY) || '[]');
   const saveRoomsToDB = (rooms: Room[]) => localStorage.setItem(ROOMS_DB_KEY, JSON.stringify(rooms));
   
-  const getOnlineUsers = (): User[] => JSON.parse(localStorage.getItem(ONLINE_USERS_KEY) || '[]');
-  const saveOnlineUsers = (users: User[]) => localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(users));
+  const getOnlineUsersFromDB = (): User[] => JSON.parse(localStorage.getItem(ONLINE_USERS_KEY) || '[]');
 
   useEffect(() => {
     // Add beforeunload listener to clean up online status
     const handleBeforeUnload = () => {
         const sessionEmail = localStorage.getItem(SESSION_KEY);
         if (sessionEmail) {
-             let onlineUsers: User[] = getOnlineUsers();
-             onlineUsers = onlineUsers.filter(u => u.id !== sessionEmail);
-             saveOnlineUsers(onlineUsers);
+             let currentOnlineUsers: User[] = getOnlineUsersFromDB();
+             currentOnlineUsers = currentOnlineUsers.filter(u => u.id !== sessionEmail);
+             localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(currentOnlineUsers));
         }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Listen for changes in other tabs
+    const handleStorageChange = (event: StorageEvent) => {
+        if (event.key === ONLINE_USERS_KEY) {
+            setOnlineUsers(getOnlineUsersFromDB());
+        }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Initial load of online users
+    setOnlineUsers(getOnlineUsersFromDB());
 
     // Load initial rooms and check for session
     const savedRooms = getRoomsFromDB();
@@ -76,10 +87,11 @@ const App: React.FC = () => {
             setCurrentUser(loggedInUser);
 
             // Add to online list on session restore
-            const onlineUsers = getOnlineUsers();
-            if (!onlineUsers.find(u => u.id === loggedInUser.id)) {
-                onlineUsers.push(loggedInUser);
-                saveOnlineUsers(onlineUsers);
+            const currentOnlineUsers = getOnlineUsersFromDB();
+            if (!currentOnlineUsers.find(u => u.id === loggedInUser.id)) {
+                const newOnlineUsers = [...currentOnlineUsers, loggedInUser];
+                localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(newOnlineUsers));
+                setOnlineUsers(newOnlineUsers);
             }
             
             const urlParams = new URLSearchParams(window.location.search);
@@ -97,6 +109,7 @@ const App: React.FC = () => {
 
     return () => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.removeEventListener('storage', handleStorageChange);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -146,10 +159,11 @@ const App: React.FC = () => {
       localStorage.setItem(SESSION_KEY, email);
       
       // Add to online list
-      const onlineUsers = getOnlineUsers();
-      if (!onlineUsers.find(u => u.id === loggedInUser.id)) {
-          onlineUsers.push(loggedInUser);
-          saveOnlineUsers(onlineUsers);
+      const currentOnlineUsers = getOnlineUsersFromDB();
+      if (!currentOnlineUsers.find(u => u.id === loggedInUser.id)) {
+          const newOnlineUsers = [...currentOnlineUsers, loggedInUser];
+          localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(newOnlineUsers));
+          setOnlineUsers(newOnlineUsers);
       }
       
       const urlParams = new URLSearchParams(window.location.search);
@@ -167,9 +181,10 @@ const App: React.FC = () => {
   const handleLogout = () => {
     const sessionEmail = localStorage.getItem(SESSION_KEY);
     if (sessionEmail) {
-        let onlineUsers = getOnlineUsers();
-        onlineUsers = onlineUsers.filter(u => u.id !== sessionEmail);
-        saveOnlineUsers(onlineUsers);
+        let currentOnlineUsers = getOnlineUsersFromDB();
+        const newOnlineUsers = currentOnlineUsers.filter(u => u.id !== sessionEmail);
+        localStorage.setItem(ONLINE_USERS_KEY, JSON.stringify(newOnlineUsers));
+        setOnlineUsers(newOnlineUsers);
     }
     setCurrentUser(null);
     localStorage.removeItem(SESSION_KEY);
@@ -411,6 +426,7 @@ const App: React.FC = () => {
             content = <HomePage 
                 user={currentUser} 
                 rooms={rooms}
+                onlineUsers={onlineUsers}
                 onCreateRoom={handleCreateRoom}
                 onJoinRoom={handleJoinRoom} 
                 onLogout={handleLogout} 
@@ -456,6 +472,7 @@ const App: React.FC = () => {
               content = <HomePage 
                   user={currentUser} 
                   rooms={rooms}
+                  onlineUsers={onlineUsers}
                   onCreateRoom={handleCreateRoom}
                   onJoinRoom={handleJoinRoom} 
                   onLogout={handleLogout} 
